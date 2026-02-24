@@ -24,5 +24,7 @@ ShowToc: false
 
 Research tools released as open source:
 
-- [phantom-detect](https://github.com/brianrutherford/phantom-detect) — LLM covert channel detection toolkit
-- [pqc-py](https://github.com/brianrutherford/pqc-py) — Post-quantum cryptography for Python *(coming soon)*
+- [phantom-detect](https://github.com/ScrappinR/phantom-detect) — LLM covert channel detection toolkit
+- [pqc-py](https://github.com/ScrappinR/pqc-py) — Post-quantum cryptography for Python via Rust
+- [hndl-detect](https://github.com/ScrappinR/hndl-detect) — Harvest-Now-Decrypt-Later detection
+- [behavioral-entropy](https://github.com/ScrappinR/behavioral-entropy) — AI agent behavioral fingerprinting
