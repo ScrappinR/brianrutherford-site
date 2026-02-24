@@ -1,8 +1,21 @@
 # Conference Talk Abstracts
 
+## CFP Deadlines
+
+| Conference | Deadline | URL |
+|-----------|----------|-----|
+| **Black Hat USA 2026** | **March 20, 2026** | https://usa-briefings-cfp.blackhat.com/ |
+| BSides Las Vegas | Rolling (acceptances from May 26) | https://bsideslv.org/cfp |
+| DEF CON 34 | May 1, 2026 | https://defcon.org/html/defcon-34/dc-34-cfp.html |
+| SANS AI Summit | No public deadline (event Apr 20-21) | SummitSpeakers@sans.org |
+| ShmooCon | PERMANENTLY ENDED | N/A |
+| BSides DC | NO 2026 EVENT | N/A |
+
+---
+
 ## Talk 1: "Your AI Agent Is Leaking Data — And You Can't See It"
 
-**Target conferences:** DEF CON, BSides, Black Hat
+**Target conferences:** Black Hat USA (Mar 20 deadline), DEF CON 34 (May 1), BSides LV Ground Truth track (rolling)
 
 ### Abstract (300 words)
 
@@ -31,7 +44,7 @@ Live demos include: encoding a secret message in GPT-4o output via system prompt
 
 ## Talk 2: "Post-Quantum Crypto Migration: The Practical Guide Nobody Wrote"
 
-**Target conferences:** BSides, SANS, ShmooCon
+**Target conferences:** BSides LV (rolling), SANS AI Summit (email SummitSpeakers@sans.org)
 
 ### Abstract (250 words)
 
@@ -49,7 +62,7 @@ The audience will leave with: a decision framework for which PQC algorithms to d
 
 ## Talk 3: "Harvest Now, Decrypt Later: Detection in the Real World"
 
-**Target conferences:** BSides, SANS, Counter-UAS Summit (for the C-UAS angle)
+**Target conferences:** BSides LV (rolling), SANS AI Summit (email SummitSpeakers@sans.org)
 
 ### Abstract (200 words)
 
