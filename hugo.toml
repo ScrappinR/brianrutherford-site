@@ -1,0 +1,67 @@
+baseURL = 'https://brianrutherford.dev/'
+languageCode = 'en-us'
+title = 'Brian James Rutherford'
+theme = 'PaperMod'
+paginate = 10
+
+[params]
+  author = 'Brian James Rutherford'
+  description = 'Security researcher. Post-quantum cryptography, AI agent security, LLM covert channels.'
+  env = 'production'
+  defaultTheme = 'auto'
+  ShowReadingTime = true
+  ShowShareButtons = false
+  ShowPostNavLinks = true
+  ShowBreadCrumbs = true
+  ShowCodeCopyButtons = true
+  ShowToc = true
+  TocOpen = false
+
+  [params.homeInfoParams]
+    Title = 'Brian James Rutherford'
+    Content = """
+Security researcher focused on post-quantum cryptography, AI agent authentication, \
+and covert channel detection in LLM outputs.
+
+USMC veteran. FAA Part 107 pilot. Building tools that make AI systems harder to subvert.
+"""
+
+  [[params.socialIcons]]
+    name = 'github'
+    url = 'https://github.com/brianrutherford'
+  [[params.socialIcons]]
+    name = 'email'
+    url = 'mailto:brian@delalli.com'
+
+[menu]
+  [[menu.main]]
+    identifier = 'blog'
+    name = 'Blog'
+    url = '/blog/'
+    weight = 10
+  [[menu.main]]
+    identifier = 'research'
+    name = 'Research'
+    url = '/research/'
+    weight = 20
+  [[menu.main]]
+    identifier = 'projects'
+    name = 'Projects'
+    url = '/projects/'
+    weight = 30
+  [[menu.main]]
+    identifier = 'about'
+    name = 'About'
+    url = '/about/'
+    weight = 40
+
+[outputs]
+  home = ['HTML', 'RSS', 'JSON']
+
+[markup]
+  [markup.highlight]
+    style = 'monokai'
+    lineNos = false
+
+[minify]
+  disableXML = true
