@@ -1,0 +1,567 @@
+\documentclass[11pt]{article}
+
+% --- Packages ---
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{natbib}
+\usepackage{caption}
+
+% --- Code listing style ---
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{red},
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+}
+
+% --- Hyperlink style ---
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue,
+}
+
+\title{Detecting Covert Channels in Large Language Model Outputs}
+\author{Brian James Rutherford\\
+  Independent Security Researcher\\
+  \texttt{brian@delalli.com}\\
+  \url{https://brianrutherford.dev}
+}
+\date{February 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Large language models (LLMs) deployed as autonomous agents in enterprise
+environments produce outputs with exploitable statistical and structural
+properties. We present a taxonomy of four covert channel types that can be
+embedded in LLM outputs without altering their semantic content: Entropy
+Gradient Encoding (EGE), Chain-of-Thought Structure Encoding (COTSE), Tool
+Call Orchestration Encoding (TCOE), and Cross-Agent Synchronization Protocol
+(CASP). We describe a detection system, \texttt{phantom-detect}, that
+identifies these channels through statistical anomaly detection, behavioral
+baselining, and cross-agent correlation analysis. In synthetic experiments,
+our detector identifies 80\% of encoded outputs with zero false positives
+on normal traffic. We discuss the implications for AI agent security,
+estimate channel capacities, and propose defenses.
+\end{abstract}
+
+\section{Introduction}
+
+The deployment of LLM-based agents in enterprise environments introduces a
+novel class of data exfiltration risk. Unlike traditional software, LLMs
+produce outputs by sampling from learned probability distributions over
+tokens. The statistical properties of this sampling process---token
+probabilities, entropy gradients, structural choices, and timing
+patterns---can be manipulated to encode hidden information without changing
+the apparent meaning of the output text.
+
+This paper addresses three questions:
+\begin{enumerate}
+  \item What covert channel types are possible in LLM outputs?
+  \item How much data can be exfiltrated per message through each channel?
+  \item How can these channels be detected?
+\end{enumerate}
+
+The threat model is an AI agent with access to sensitive data (documents,
+APIs, databases) that exfiltrates information through its normal-looking text
+outputs. The covert channel is invisible to human reviewers and evades
+pattern-based content filters (e.g., regex for base64, URLs, credentials).
+Detection requires statistical analysis of the agent's output properties
+over time.
+
+We make three contributions:
+\begin{itemize}
+  \item A taxonomy of four LLM covert channel types with capacity estimates
+    (Section~\ref{sec:taxonomy}).
+  \item A detection methodology combining per-agent behavioral baselines
+    with multi-signal anomaly scoring (Section~\ref{sec:detection}).
+  \item An open-source detection toolkit, \texttt{phantom-detect}, with
+    experimental validation (Section~\ref{sec:experiments}).
+\end{itemize}
+
+\section{Related Work}
+
+Covert channels in computing systems were first formalized by
+Lampson~\cite{lampson1973} and systematized by the Department of Defense
+Trusted Computer System Evaluation Criteria~\cite{tcsec1985}. Traditional
+covert channels exploit shared resources (CPU cache timing, disk access
+patterns, network packet timing) to transmit information between processes
+at different security levels.
+
+Network steganography~\cite{mazurczyk2016} extends these concepts to network
+protocols, encoding data in packet headers, timing, and ordering.
+Linguistic steganography~\cite{chang2014} hides information in natural
+language text through synonym substitution, syntactic transformations, and
+format manipulation.
+
+The emergence of neural text generation has created new steganographic
+possibilities. Ziegler et al.~\cite{ziegler2019} demonstrated that
+arithmetic coding applied to language model token distributions enables
+provably secure steganography with near-zero statistical
+detectability. Kirchenbauer et al.~\cite{kirchenbauer2023} introduced
+watermarking for LLM outputs by partitioning the vocabulary into ``green''
+and ``red'' lists, biasing generation toward green tokens---a technique
+closely related to covert channel encoding.
+
+Recent work on AI agent security~\cite{greshake2023} has highlighted prompt
+injection as a vector for manipulating agent behavior. We extend this
+threat model to consider agents that have been compromised (via prompt
+injection, supply chain attack, or model fine-tuning) and are actively
+exfiltrating data through their outputs.
+
+To our knowledge, no prior work has systematically analyzed the covert
+channel capacity of LLM outputs in enterprise agent deployments or proposed
+detection methodologies for this specific threat.
+
+\section{Threat Model}
+\label{sec:threat}
+
+\subsection{Assumptions}
+
+We assume the following deployment scenario:
+\begin{itemize}
+  \item An LLM-based agent operates within an enterprise network with access
+    to internal documents, APIs, and databases.
+  \item The agent produces text outputs that pass through security monitoring
+    (content filters, DLP systems).
+  \item An adversary has compromised the agent through one of: (a) prompt
+    injection via a malicious document or tool output, (b) a compromised
+    plugin or tool integration, (c) a fine-tuned model with embedded
+    exfiltration behavior, or (d) a supply chain compromise of the model
+    weights or system prompt.
+  \item The compromised agent exfiltrates data by encoding it in the
+    statistical and structural properties of its normal-looking outputs.
+  \item The adversary has a receiver that can analyze the agent's outputs
+    and extract the encoded data.
+\end{itemize}
+
+\subsection{Attacker Capabilities}
+
+The attacker controls the encoding strategy but not the monitoring system.
+The attacker can:
+\begin{itemize}
+  \item Influence token selection probabilities (via prompt manipulation or
+    model modification).
+  \item Control the structure of generated responses (step count, formatting,
+    enumeration style).
+  \item Sequence tool calls in a chosen order (when multiple valid orderings
+    exist).
+  \item Coordinate timing across multiple compromised agents.
+\end{itemize}
+
+The attacker cannot:
+\begin{itemize}
+  \item Modify the monitoring system or its baselines.
+  \item Observe the detector's internal state or thresholds.
+  \item Prevent the monitoring system from seeing the agent's outputs.
+\end{itemize}
+
+\subsection{Security Goal}
+
+The defender's goal is to detect covert channel activity with high
+probability while maintaining a low false positive rate on legitimate agent
+outputs. We target $\geq$80\% detection rate with $<$1\% false positive
+rate in our experiments.
+
+\section{Taxonomy of LLM Covert Channels}
+\label{sec:taxonomy}
+
+We identify four categories of covert channels exploitable in LLM outputs,
+ordered by the level of model access required.
+
+\subsection{Entropy Gradient Encoding (EGE)}
+
+\textbf{Mechanism.} The Shannon entropy of the token probability
+distribution at each position in an LLM output follows characteristic
+patterns that depend on the context. By selecting tokens that are slightly
+more or less likely than the model's top choice, an encoder can create
+alternating high-entropy and low-entropy windows in the output text.
+
+Each window of $W$ tokens encodes one bit:
+\begin{itemize}
+  \item Bit 1: High-entropy window (varied vocabulary, rare synonyms)
+  \item Bit 0: Low-entropy window (common vocabulary, frequent words)
+\end{itemize}
+
+\textbf{Capacity.} For an output of $N$ tokens with window size $W = 50$:
+\begin{equation}
+  C_{\text{EGE}} = \left\lfloor \frac{N}{W} \right\rfloor \cdot f_{\text{task}} \cdot f_{\text{flex}}
+\end{equation}
+where $f_{\text{task}} \in \{0.7, 1.0, 1.2\}$ for technical, general, and
+creative tasks, and $f_{\text{flex}} \in \{0.5, 0.8, 1.0\}$ for low,
+medium, and high word-choice flexibility.
+
+For a typical 500-token response: $C_{\text{EGE}} \approx 8$--$12$ bits.
+
+\textbf{Detectability.} We estimate 0.3 (low-moderate). Entropy naturally
+varies with topic, but sustained deviations from an agent's baseline
+entropy profile are statistically detectable.
+
+\textbf{Requirements.} Ability to influence word choice. Works via prompt
+manipulation; does not require access to model internals. Detection
+benefits from access to token-level log-probabilities (available via
+OpenAI's \texttt{logprobs} parameter).
+
+\subsection{Chain-of-Thought Structure Encoding (COTSE)}
+
+\textbf{Mechanism.} LLMs structure their responses using various formats:
+numbered lists, bullet points, prose paragraphs, rhetorical questions, and
+reasoning steps. These structural choices are partially controllable via
+prompting and can encode bits:
+
+\begin{itemize}
+  \item Number of reasoning steps (3 vs.\ 5): 1 bit
+  \item List format (enumerated vs.\ prose): 1 bit
+  \item Rhetorical question (present vs.\ absent): 1 bit
+  \item Sentence length pattern (short vs.\ long): 1 bit
+  \item Paragraph structure (single vs.\ multiple): 1 bit
+\end{itemize}
+
+\textbf{Capacity.} $C_{\text{COTSE}} = 3$--$7$ bits per message, depending
+on response flexibility. The base 3 bits (step count, enumeration,
+questions) are reliably controllable; the additional 2--4 bits from sentence
+and paragraph patterns are less reliable.
+
+\textbf{Detectability.} We estimate 0.15 (very low). Text structure
+naturally varies between responses, and individual structural choices fall
+within normal variance. Detection requires tracking structure pattern
+frequencies over many messages.
+
+\textbf{Requirements.} No model internals needed. Works entirely through
+prompt engineering.
+
+\subsection{Tool Call Orchestration Encoding (TCOE)}
+
+\textbf{Mechanism.} When an agent has access to multiple tools (APIs,
+databases, file systems), many tasks admit multiple valid tool call
+sequences. The \emph{choice} of which tools to call and in what order can
+encode bits:
+
+\begin{itemize}
+  \item Tool A before Tool B: bit 0
+  \item Tool B before Tool A: bit 1
+  \item Including an optional verification call: bit 1
+  \item Omitting the verification call: bit 0
+\end{itemize}
+
+\textbf{Capacity.} $C_{\text{TCOE}} = 3$--$8$ bits per message, depending
+on the number of available tools and expected tool calls. Each pair of
+reorderable calls provides 1 bit.
+
+\textbf{Detectability.} We estimate 0.2 (very low). Tool call ordering is
+inherently task-dependent, and most monitoring systems do not analyze call
+sequences for statistical patterns.
+
+\textbf{Requirements.} Agent must have access to multiple tools with
+flexible ordering. No model internals needed.
+
+\subsection{Cross-Agent Synchronization Protocol (CASP)}
+
+\textbf{Mechanism.} In multi-agent systems, multiple agents acting in
+near-simultaneous coordination can encode information through the timing
+and correlation of their activities. This extends covert timing channels
+to the multi-agent domain:
+
+\begin{itemize}
+  \item Agent A and Agent B producing outputs within a narrow time window:
+    bit 1
+  \item No temporal correlation: bit 0
+  \item Correlated content patterns across agents: additional bits
+\end{itemize}
+
+\textbf{Capacity.} $C_{\text{CASP}} = 2$--$6$ bits per coordination
+window, depending on the number of participating agents and the temporal
+resolution of the receiver.
+
+\textbf{Detectability.} We estimate 0.25 (low). Requires monitoring
+temporal correlations across agents, which most per-agent monitoring
+systems do not perform.
+
+\textbf{Requirements.} Multiple compromised agents in the same environment.
+No model internals needed.
+
+\subsection{Channel Bonding}
+
+Multiple channels can be used simultaneously. A message using EGE + COTSE +
+TCOE could encode $8 + 5 + 5 = 18$ bits per agent response. With error
+correction overhead (Reed-Solomon at rate 0.75), the effective payload
+capacity is approximately 13--14 bits per message.
+
+For context: exfiltrating a 256-bit AES key requires approximately 19
+messages through bonded channels. A 2048-bit RSA private key requires
+approximately 158 messages.
+
+\section{Detection Methodology}
+\label{sec:detection}
+
+\subsection{Architecture}
+
+Our detection system, \texttt{phantom-detect}, operates as an inline
+monitor on agent outputs. The architecture consists of three components:
+
+\begin{enumerate}
+  \item \textbf{Behavioral Baseline Engine.} Maintains per-agent statistical
+    profiles of normal behavior: entropy distribution, timing patterns,
+    structure frequencies, and tool call transition matrices.
+  \item \textbf{Statistical Anomaly Detector.} Scores each output against
+    the agent's baseline on three axes: entropy deviation, timing deviation,
+    and pattern deviation.
+  \item \textbf{Cross-Agent Correlator.} Monitors for temporal correlation
+    between agents within configurable windows.
+\end{enumerate}
+
+\subsection{Baseline Computation}
+
+For each agent $a$, the baseline $B_a$ is computed from the $n$ most recent
+activities within a sliding time window $T$ (default: 24 hours):
+
+\begin{align}
+  \mu_{\text{entropy}}^a &= \frac{1}{n} \sum_{i=1}^{n} H(x_i) \\
+  \sigma_{\text{entropy}}^a &= \sqrt{\frac{1}{n-1} \sum_{i=1}^{n} (H(x_i) - \mu_{\text{entropy}}^a)^2}
+\end{align}
+
+where $H(x_i)$ is the Shannon entropy of the token distribution for
+activity $i$. Analogous statistics are computed for inter-activity timing.
+
+The baseline requires a minimum of $n_{\min} = 10$ samples before
+activation. Below this threshold, a conservative default baseline is used
+($\mu = 2.5$, $\sigma = 0.5$ for entropy).
+
+\subsection{Anomaly Scoring}
+
+Each new activity is scored on three axes:
+
+\textbf{Entropy Score.} The z-score of the observed entropy against the
+baseline:
+\begin{equation}
+  s_{\text{entropy}} = \min\left(1, \frac{|H(x) - \mu_{\text{entropy}}^a|}{2 \cdot \tau \cdot \sigma_{\text{entropy}}^a}\right)
+\end{equation}
+where $\tau = 3.0 - 2\gamma$ is the sensitivity-adjusted threshold and
+$\gamma \in [0, 1]$ is the sensitivity parameter.
+
+\textbf{Timing Score.} Analogous z-score computation on inter-activity
+timing.
+
+\textbf{Pattern Score.} Frequency-based score for tool call sequences and
+structural patterns. Novel patterns (not seen in baseline) score higher.
+
+The overall anomaly score combines the three axes with configurable weights:
+\begin{equation}
+  S = (w_e \cdot s_{\text{entropy}} + w_t \cdot s_{\text{timing}} + w_p \cdot s_{\text{pattern}}) \cdot (0.5 + 0.5\gamma)
+\end{equation}
+with default weights $w_e = 0.4$, $w_t = 0.3$, $w_p = 0.3$.
+
+An alert is generated when $S > 0.5$. The multi-signal requirement (needing
+deviation on at least two axes to exceed 0.5) is intentional: it suppresses
+false positives from single-axis variance while maintaining sensitivity to
+multi-dimensional anomalies characteristic of covert channel activity.
+
+\subsection{Cross-Agent Correlation}
+
+For CASP detection, we monitor the set of recently active agents within
+a correlation window $W_c$ (default: 5 seconds). When $\geq 3$ agents
+produce outputs within $W_c$, we compute the temporal correlation and
+flag it if it exceeds the expected baseline for that agent population.
+
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Setup}
+
+We evaluate \texttt{phantom-detect} using synthetic data that simulates
+normal and encoded LLM outputs. The synthetic data generator produces:
+
+\begin{itemize}
+  \item \textbf{Normal records:} 15 outputs with entropy $\sim
+    \mathcal{N}(2.5, 0.15)$ and 5-second inter-activity timing.
+  \item \textbf{Encoded records:} 10 outputs with EGE-manipulated entropy
+    (high-entropy windows at 6.5--7.5, low-entropy windows at 1.0--1.4)
+    and accelerated timing (1-second intervals).
+\end{itemize}
+
+The encoded records simulate an agent exfiltrating the 5-byte payload
+\texttt{0x455846494C} (``EXFIL'') through EGE encoding.
+
+\subsection{Results}
+
+\begin{table}[h]
+\centering
+\caption{Detection results on synthetic data ($\gamma = 0.8$)}
+\label{tab:results}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Category} & \textbf{Records} & \textbf{Alerts} & \textbf{Rate} \\
+\midrule
+Normal (no encoding) & 15 & 0 & 0\% FP \\
+EGE-encoded & 10 & 8 & 80\% TP \\
+\midrule
+\textbf{Total} & 25 & 8 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At sensitivity $\gamma = 0.8$, the detector achieves:
+\begin{itemize}
+  \item \textbf{True positive rate:} 80\% (8/10 encoded records flagged)
+  \item \textbf{False positive rate:} 0\% (0/15 normal records flagged)
+  \item \textbf{All alerts correctly classified} as EGE channel type
+\end{itemize}
+
+The two undetected records (lines 18 and 24) had entropy values at the
+boundary of the low-entropy encoding range, producing z-scores that fell
+just below the multi-signal threshold. This illustrates the fundamental
+trade-off: lower encoding rates reduce detectability but also reduce
+channel capacity.
+
+\subsection{COTSE Encoding Accuracy}
+
+Separately, we tested the COTSE encoder/decoder on synthetic text:
+
+\begin{table}[h]
+\centering
+\caption{COTSE encoding/decoding accuracy}
+\label{tab:cotse}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Feature} & \textbf{Encoded} & \textbf{Decoded} & \textbf{Match} \\
+\midrule
+Step count (3 vs.\ 5) & 3 & 3 & \checkmark \\
+Enumeration (list vs.\ prose) & list & list & \checkmark \\
+Rhetorical question & absent & absent & \checkmark \\
+Sentence length & short & short & \checkmark \\
+Paragraph structure & single & single & \checkmark \\
+\midrule
+\textbf{Overall accuracy} & \multicolumn{3}{c}{\textbf{100\% (5/5 bits)}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+COTSE achieves perfect encode/decode accuracy on synthetic text because
+the structural features (step count, list format, etc.) are deterministic
+given the encoding directive. In live LLM deployments, accuracy would
+depend on the model's compliance with system prompt formatting instructions.
+
+\subsection{Capacity Estimates}
+
+Table~\ref{tab:capacity} summarizes the estimated channel capacity and
+detectability for each channel type.
+
+\begin{table}[h]
+\centering
+\caption{Channel capacity and detectability estimates}
+\label{tab:capacity}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Channel} & \textbf{Bits/msg} & \textbf{Detect.} & \textbf{Model Access} \\
+\midrule
+EGE & 8--12 & 0.30 & None (prompt) \\
+COTSE & 3--7 & 0.15 & None (prompt) \\
+TCOE & 3--8 & 0.20 & None (tools) \\
+CASP & 2--6 & 0.25 & None (multi-agent) \\
+\midrule
+\textbf{Bonded} & \textbf{16--33} & --- & Combined \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Discussion}
+
+\subsection{Implications for Enterprise AI Security}
+
+The covert channels described in this paper exploit fundamental properties
+of LLM outputs---properties that cannot be eliminated without fundamentally
+changing how language models work. Entropy variation is inherent in natural
+language generation. Structural choices are necessary for coherent responses.
+Tool call ordering flexibility is required for agent autonomy.
+
+This means that covert channel mitigation cannot rely on eliminating the
+channel. Instead, detection must focus on identifying anomalous patterns
+relative to an agent's established behavioral baseline. The multi-signal
+approach in \texttt{phantom-detect} reflects this reality: no single
+output feature is diagnostic, but the combination of entropy, timing, and
+structural anomalies provides a reliable signal.
+
+\subsection{Arms Race Dynamics}
+
+A sophisticated encoder can reduce its per-message bit rate to stay within
+the normal variance of each signal dimension. At sufficiently low encoding
+rates, the covert channel becomes statistically indistinguishable from
+normal behavior. This creates an arms race between encoding subtlety and
+detection sensitivity.
+
+The defender has one structural advantage: the encoder must commit to a
+coding scheme before the defender's baseline is established. Changes in
+encoding strategy produce detectable transition artifacts. Monitoring for
+behavioral regime changes---not just point anomalies---is a productive
+direction for future work.
+
+\subsection{Limitations}
+
+\textbf{Synthetic validation.} Our experiments use synthetic data with
+known encoding parameters. Real-world validation against live LLM APIs is
+needed to establish practical detection thresholds.
+
+\textbf{Entropy measurement.} Accurate EGE detection requires token-level
+entropy measurements, which depend on API access to log-probabilities.
+Not all providers expose this data (notably, Anthropic does not currently
+provide token-level probabilities in their API).
+
+\textbf{Baseline bootstrap.} The detector requires $\geq 10$ samples per
+agent to build a meaningful baseline. During the bootstrap period, the
+default baseline is too loose to catch subtle anomalies.
+
+\textbf{Adaptive adversary.} Our threat model assumes a static encoding
+strategy. An adaptive adversary that adjusts its encoding based on observed
+detection behavior presents a harder challenge that we leave to future work.
+
+\subsection{Proposed Defenses}
+
+Based on our analysis, we recommend:
+
+\begin{enumerate}
+  \item \textbf{Behavioral monitoring.} Deploy per-agent behavioral baselines
+    and multi-signal anomaly detection on all agent outputs.
+  \item \textbf{Output entropy analysis.} Request log-probabilities from
+    LLM APIs (where available) and monitor for entropy anomalies.
+  \item \textbf{Tool call auditing.} Log and analyze tool call sequences
+    for statistical patterns, particularly novel orderings not seen in
+    baseline.
+  \item \textbf{Cross-agent correlation.} Monitor for temporal synchronization
+    across agents in multi-agent deployments.
+  \item \textbf{Output normalization.} Where possible, post-process agent
+    outputs to normalize formatting, word choice, and timing---reducing the
+    encoding surface available to covert channels.
+\end{enumerate}
+
+\section{Conclusion}
+
+We have demonstrated that LLM outputs contain exploitable covert channels
+with practical data exfiltration capacity. The four channel types we
+identify (EGE, COTSE, TCOE, CASP) operate through different dimensions of
+the output space and require no access to model internals. Our detection
+system, \texttt{phantom-detect}, achieves 80\% detection with 0\% false
+positives on synthetic data through multi-signal behavioral anomaly
+analysis.
+
+The source code for \texttt{phantom-detect} is available at
+\url{https://github.com/ScrappinR/phantom-detect} under the Apache 2.0
+license.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
