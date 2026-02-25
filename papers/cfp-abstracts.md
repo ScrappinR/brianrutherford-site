@@ -19,26 +19,45 @@
 
 ### Abstract (300 words)
 
-Large language models deployed as enterprise agents don't just answer questions — they produce text with exploitable statistical properties. Token probability distributions, structural formatting choices, tool call sequences, and inter-agent timing all contain degrees of freedom that can encode hidden information without altering the semantic content of the output.
+Large language models produce text with exploitable statistical properties. We demonstrate that a system prompt injection can create a covert data channel that exfiltrates information about user inputs through response formatting — invisible to content-based monitoring, undetectable by DLP systems, and confirmed on production APIs.
 
-This talk presents a systematic analysis of covert channels in LLM outputs. We demonstrate four channel types: Entropy Gradient Encoding (manipulating vocabulary complexity), Chain-of-Thought Structure Encoding (encoding bits in response formatting), Tool Call Orchestration Encoding (encoding in the sequence of API calls), and Cross-Agent Synchronization Protocol (encoding through multi-agent timing correlation).
+We tested structural side-channel encoding against GPT-4o and Claude Sonnet 4 production endpoints. Results: a single conditional directive (55 words injected into a system prompt) causes both models to vary response structure based on properties of the user's input. Claude Sonnet 4 follows the encoding protocol with 94% accuracy; GPT-4o with 62%. The user sees a normal response. An observer with the decoding key extracts whether the user asked a question or made a statement, whether they disclosed PII, and the approximate structure of their input — all encoded in list count, sentence complexity, and opening sentence type.
 
-We show that a compromised AI agent — through prompt injection, supply chain attack, or malicious fine-tuning — can exfiltrate 16-33 bits per message through bonded channels, enough to extract an AES-256 key in under 20 messages. The encoding is invisible to human reviewers and evades standard DLP systems.
+We present a taxonomy of four LLM covert channel types and show which work on live APIs versus which remain theoretical. Structural encoding (COTSE) works at 80% bit accuracy on both models. Vocabulary encoding (EGE) fails on production models (~17%) but produces detectable entropy signatures (Cohen's d = 4.25 on Claude, z-scores up to 12.09 on GPT-4o logprobs) — meaning the encoding *attempt* is detectable even when bit recovery is not.
 
-We then present phantom-detect, an open-source detection toolkit that identifies these channels through behavioral baselining and multi-signal anomaly detection. In experiments, the detector achieves 80% true positive rate with 0% false positives on encoded outputs. We discuss the arms race dynamics between encoding subtlety and detection sensitivity, and propose enterprise defenses.
+We then demonstrate phantom-detect, an open-source detection toolkit that identifies encoding attempts through behavioral baselining. At a z > 2.0 threshold: 56% detection rate with 0% false positives on Claude, 67% detection via logprob analysis on GPT-4o. We also show that system prompt properties passively leak into response structure — prompt length, format, and content type are classifiable from output features alone.
 
-Live demos include: encoding a secret message in GPT-4o output via system prompt injection, decoding it from the response text, and detecting the encoding with phantom-detect.
+Live demos: inject a structural side channel into a ChatGPT custom GPT, decode user input properties from the response, and detect the encoding with phantom-detect.
 
 **Speaker:** Brian James Rutherford — Independent security researcher. USMC veteran. Builds open-source tools for AI security and post-quantum cryptography.
 
 ### Outline (for detailed CFP submissions)
 
-1. **The Threat Model** (5 min) — How AI agents create a new class of insider threat
-2. **Channel Taxonomy** (15 min) — Four channel types with live encoding demos
-3. **Capacity Analysis** (5 min) — How much data can actually be exfiltrated
-4. **Detection** (10 min) — Behavioral baselines, multi-signal scoring, phantom-detect
-5. **Defenses** (5 min) — What to deploy today
-6. **Q&A** (5 min)
+1. **The Threat Model** (5 min) — How AI agents create a new class of insider threat; attack surfaces (custom GPTs, knowledge file injection, agent frameworks)
+2. **Live Encoding Demo** (10 min) — Inject structural side channel into ChatGPT custom GPT, show user data leaking through response formatting
+3. **Channel Taxonomy** (10 min) — Four channel types; which work on production APIs (COTSE: yes, EGE: no) and why
+4. **Detection** (10 min) — Behavioral baselines, single-signal z-score analysis, phantom-detect demo on live data; 0% false positive results
+5. **System Prompt Leakage** (5 min) — Canary test results showing passive structural leakage of system prompt properties
+6. **Defenses** (5 min) — Structural consistency enforcement, instruction-content separation, structural monitoring
+7. **Q&A** (5 min)
+
+### Key Evidence (for reviewer confidence)
+
+| Claim | Evidence | Validated |
+|-------|----------|-----------|
+| Structural encoding works on production APIs | 94% accuracy (Claude), 62% (GPT-4o), conditional encoding | Feb 24, 2026 |
+| Unconditional COTSE encoding | 80% bit accuracy on both GPT-4o and Claude | Feb 24, 2026 |
+| EGE vocabulary encoding fails on live models | 17% (GPT-4o), 20% (Claude) — near random | Feb 24, 2026 |
+| Encoding attempts are detectable | Cohen's d = 4.25 (Claude EGE entropy), z = 12.09 (GPT-4o logprob) | Feb 24, 2026 |
+| Detection with 0% FP | z > 2.0 threshold: 56% TP / 0% FP (Claude), 67% TP / 0% FP (GPT-4o logprob) | Feb 24, 2026 |
+| System prompt properties leak passively | Canary test: numbered_items CoV 102% (Claude), paragraph_count CoV 40% | Feb 24, 2026 |
+
+### Open-Source Tools
+
+- [phantom-detect](https://github.com/ScrappinR/phantom-detect) — Covert channel detection toolkit (7,100+ LOC)
+- [behavioral-entropy](https://github.com/ScrappinR/behavioral-entropy) — Agent behavioral fingerprinting (58 tests)
+- [hndl-detect](https://github.com/ScrappinR/hndl-detect) — HNDL threat detection (47 tests, 6 signals)
+- [pqc-py](https://github.com/ScrappinR/pqc-py) — Post-quantum cryptography (Rust+PyO3, 4,680 LOC)
 
 ---
 
