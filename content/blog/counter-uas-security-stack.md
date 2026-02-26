@@ -1,7 +1,7 @@
 ---
 title: "The Counter-UAS Security Stack Nobody's Building"
 date: 2026-02-24
-draft: true
+draft: false
 tags: ["c-uas", "drones", "security", "aviation", "defense", "pqc"]
 description: "Counter-drone systems have a cybersecurity problem. Here's what it looks like."
 ShowToc: true

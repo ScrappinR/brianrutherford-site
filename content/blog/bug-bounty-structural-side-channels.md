@@ -1,7 +1,7 @@
 ---
 title: "I Exfiltrated Data Through LLM Response Formatting — 10 Channels, 4 Models, 88-96% Accuracy"
 date: 2026-02-25
-draft: true
+draft: false
 tags: ["llm", "security", "covert-channels", "bug-bounty", "ai-safety", "phantom-detect"]
 description: "A single system prompt injection activates 10 covert channels in LLM output structure. Same injection works across GPT-4o, GPT-4o-mini, Claude Sonnet 4, and Claude 3 Haiku. Entropy detection fails. Behavioral fingerprinting catches it."
 ShowToc: true

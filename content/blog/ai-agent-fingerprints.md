@@ -1,7 +1,7 @@
 ---
 title: "AI Agents Have Fingerprints: Behavioral Authentication"
 date: 2026-02-24
-draft: true
+draft: false
 tags: ["ai", "security", "behavioral-analysis", "authentication", "entropy", "agents"]
 description: "Every AI agent has a behavioral signature. Here's how to compute it."
 ShowToc: true

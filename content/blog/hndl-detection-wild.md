@@ -1,7 +1,7 @@
 ---
 title: "Detecting Harvest-Now-Decrypt-Later in the Wild"
 date: 2026-02-24
-draft: true
+draft: false
 tags: ["hndl", "quantum", "security", "network-security", "pqc", "threat-detection"]
 description: "HNDL attacks are happening now. Here's what detection actually looks like."
 ShowToc: true

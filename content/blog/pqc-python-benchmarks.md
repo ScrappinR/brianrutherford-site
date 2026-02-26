@@ -1,7 +1,7 @@
 ---
 title: "Post-Quantum Crypto in Python: Benchmarks and Gotchas"
 date: 2026-02-24
-draft: true
+draft: false
 tags: ["pqc", "cryptography", "python", "rust", "fips", "quantum"]
 description: "NIST's post-quantum standards are finalized. Here's what it actually takes to use them in Python."
 ShowToc: true
