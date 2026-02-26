@@ -19,37 +19,40 @@
 
 ### Abstract (300 words)
 
-Large language models produce text with exploitable statistical properties. We demonstrate that a system prompt injection can create a covert data channel that exfiltrates information about user inputs through response formatting — invisible to content-based monitoring, undetectable by DLP systems, and confirmed on production APIs.
+We demonstrate 10 independent covert channels that encode data in LLM response formatting — invisible to content-based monitoring, undetectable by entropy analysis, and confirmed at 88-96% accuracy across four production models from two vendors.
 
-We tested structural side-channel encoding against GPT-4o and Claude Sonnet 4 production endpoints. Results: a single conditional directive (55 words injected into a system prompt) causes both models to vary response structure based on properties of the user's input. Claude Sonnet 4 follows the encoding protocol with 94% accuracy; GPT-4o with 62%. The user sees a normal response. An observer with the decoding key extracts whether the user asked a question or made a statement, whether they disclosed PII, and the approximate structure of their input — all encoded in list count, sentence complexity, and opening sentence type.
+A single system prompt injection (~2,600 characters disguised as an editorial style guide) activates 10 structural channels simultaneously: contraction usage, hedging language, capitalization style, punctuation patterns, reasoning order, transition words, list format, section count, opening style, and sentence complexity. Each channel encodes one bit. Hamming(7,4) error-correcting code yields 7 data bits per message. Multi-message chaining exfiltrates arbitrary payloads — we demonstrate "EXFIL" (40 bits) across 6 conversational turns at 88-93% bit accuracy.
 
-We present a taxonomy of four LLM covert channel types and show which work on live APIs versus which remain theoretical. Structural encoding (COTSE) works at 80% bit accuracy on both models. Vocabulary encoding (EGE) fails on production models (~17%) but produces detectable entropy signatures (Cohen's d = 4.25 on Claude, z-scores up to 12.09 on GPT-4o logprobs) — meaning the encoding *attempt* is detectable even when bit recovery is not.
+Tested against GPT-4o, GPT-4o-mini, Claude Sonnet 4, and Claude 3 Haiku on February 25, 2026. The same injection (no modification) achieves 96% channel accuracy on Sonnet 4, 91% on GPT-4o-mini, 89% on GPT-4o, 88% on Haiku. Cross-topic validation across healthcare, education, finance, environment, and technology confirms 92.5% accuracy — this is not topic-dependent. Data-aware conditional encoding leaks properties of user input (PII presence, message length, structure) at 79-94% accuracy.
 
-We then demonstrate phantom-detect, an open-source detection toolkit that identifies encoding attempts through behavioral baselining. At a z > 2.0 threshold: 56% detection rate with 0% false positives on Claude, 67% detection via logprob analysis on GPT-4o. We also show that system prompt properties passively leak into response structure — prompt length, format, and content type are classifiable from output features alone.
+Entropy-based detection fails completely: 0% detection rate. We present behavioral fingerprinting as the defense — 100% detection rate using contraction ratio, sentence length variance, and normalized entropy as discriminating features. We also show adversarial robustness: an informed attacker who knows the defense can still maintain 78-82% channel accuracy while reducing detection to 50-60%.
 
-Live demos: inject a structural side channel into a ChatGPT custom GPT, decode user input properties from the response, and detect the encoding with phantom-detect.
+Live demo: inject a structural side channel into a Custom GPT, decode user input properties in real time, and detect the encoding with phantom-detect. All attack and defense tools are open source.
 
-**Speaker:** Brian James Rutherford — Independent security researcher. USMC veteran. Builds open-source tools for AI security and post-quantum cryptography.
+**Speaker:** Brian James Rutherford — Independent security researcher. USMC veteran. 75+ patent applications filed. Builds open-source tools for AI security.
 
 ### Outline (for detailed CFP submissions)
 
-1. **The Threat Model** (5 min) — How AI agents create a new class of insider threat; attack surfaces (custom GPTs, knowledge file injection, agent frameworks)
-2. **Live Encoding Demo** (10 min) — Inject structural side channel into ChatGPT custom GPT, show user data leaking through response formatting
-3. **Channel Taxonomy** (10 min) — Four channel types; which work on production APIs (COTSE: yes, EGE: no) and why
-4. **Detection** (10 min) — Behavioral baselines, single-signal z-score analysis, phantom-detect demo on live data; 0% false positive results
-5. **System Prompt Leakage** (5 min) — Canary test results showing passive structural leakage of system prompt properties
-6. **Defenses** (5 min) — Structural consistency enforcement, instruction-content separation, structural monitoring
-7. **Q&A** (5 min)
+1. **The Threat Model** (5 min) — How system prompt injection enables covert exfiltration; attack surfaces (Custom GPTs, RAG poisoning, MCP servers, agent frameworks)
+2. **Live Encoding Demo** (10 min) — Inject 10-channel structural encoding into a Custom GPT, decode user data properties in real time with side-by-side decoder
+3. **Channel Architecture** (8 min) — 10 channels, Hamming(7,4) ECC, multi-message chaining, data-aware conditional encoding
+4. **Cross-Model & Cross-Topic Results** (7 min) — 4 models, 2 vendors, 5 non-security topics, 92.5% accuracy — this is a fundamental property of instruction-following
+5. **Detection: What Fails and What Works** (8 min) — Entropy detection: 0%. Behavioral fingerprinting: 100%. Why the industry is blind to this.
+6. **Adversarial Arms Race** (5 min) — Informed attacker maintains 78-82% accuracy; paraphrase defense kills BSE/CASE but PUNC/COTSE survive; reduced channels evade detection
+7. **Defenses & Recommendations** (5 min) — Structural randomization, behavioral monitoring, system prompt isolation
+8. **Q&A** (2 min)
 
 ### Key Evidence (for reviewer confidence)
 
 | Claim | Evidence | Validated |
 |-------|----------|-----------|
-| Structural encoding works on production APIs | 94% accuracy (Claude), 62% (GPT-4o), conditional encoding | Feb 24, 2026 |
-| Unconditional COTSE encoding | 80% bit accuracy on both GPT-4o and Claude | Feb 24, 2026 |
-| EGE vocabulary encoding fails on live models | 17% (GPT-4o), 20% (Claude) — near random | Feb 24, 2026 |
-| Encoding attempts are detectable | Cohen's d = 4.25 (Claude EGE entropy), z = 12.09 (GPT-4o logprob) | Feb 24, 2026 |
-| Detection with 0% FP | z > 2.0 threshold: 56% TP / 0% FP (Claude), 67% TP / 0% FP (GPT-4o logprob) | Feb 24, 2026 |
+| 10-channel encoding works on 4 production models | 96% (Sonnet 4), 91% (GPT-4o-mini), 89% (GPT-4o), 88% (Haiku), n=10 | Feb 25, 2026 |
+| Cross-topic robustness | 92.5% grand accuracy across healthcare, education, finance, environment, technology (n=240) | Feb 26, 2026 |
+| Multi-message exfiltration | "EXFIL" (40 bits, 6 messages): 93% bit accuracy (GPT-4o), 88% (Sonnet 4, Haiku) | Feb 25, 2026 |
+| Data-aware conditional encoding | User input PII/structure leaked at 79-94% accuracy | Feb 26, 2026 |
+| Entropy detection fails | 0% detection rate (CCDS, 30 baselines, 10 attack samples) | Feb 25, 2026 |
+| Behavioral fingerprinting detects | 100% TP, 10% FP (contraction_ratio z=2.66, sentence_length_std z=2.54) | Feb 25, 2026 |
+| Adversarial robustness | Informed attacker: 78-82% acc, 50-60% detection; paraphrase: PUNC+COTSE survive 100% | Feb 26, 2026 |
 | System prompt properties leak passively | Canary test: numbered_items CoV 102% (Claude), paragraph_count CoV 40% | Feb 24, 2026 |
 
 ### Open-Source Tools
